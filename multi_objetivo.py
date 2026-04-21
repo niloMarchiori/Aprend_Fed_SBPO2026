@@ -5,7 +5,7 @@ from pymoo.core.mixed import MixedVariableMating, MixedVariableSampling, MixedVa
 from pymoo.optimize import minimize
 from pymoo.core.variable import Real, Integer, Binary
 from pymoo.visualization.scatter import Scatter
-
+from FLPOPT.flopt import FLPOPT
 # ======================================================================
 # 1. DEFINIÇÃO DAS CONSTANTES DO PROBLEMA
 # ======================================================================
@@ -27,119 +27,12 @@ T_min = 1.0
 T_max = 500.0
 
 # ======================================================================
-# 2. DEFINIÇÃO DA CLASSE DO PROBLEMA
-# ======================================================================
-class FederatedLearningProblem(ElementwiseProblem):
-    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev):
-        self.N = N
-        self.alpha = alpha
-        self.c = c
-        self.S = S
-        self.f_min = f_min
-        self.f_max = f_max
-        self.epsilon_0 = epsilon_0
-        self.theta_prev = theta_prev
-        
-        # Construindo o dicionário de Variáveis Mistas
-        vars_dict = {}
-        
-        # Variável T (Contínua, Única global)
-        vars_dict["T"] = Real(bounds=(T_min, T_max))
-        
-        for n in range(N):
-            # f_n (Contínua)
-            vars_dict[f"f_{n}"] = Real(bounds=(f_min[n], f_max[n]))
-            # beta_n (Binária)
-            vars_dict[f"beta_{n}"] = Binary()
-            # psi_n (Inteira) - N*
-            vars_dict[f"psi_{n}"] = Integer(bounds=(1, 100))
-            # theta_n (Contínua) - Limitada em [0.01, 0.99] para evitar div/0 e log(0)
-            vars_dict[f"theta_{n}"] = Real(bounds=(0.01, 0.99))
-            
-        super().__init__(
-            vars=vars_dict,
-            n_obj=3,          # AGORA TEMOS 3 OBJETIVOS
-            n_ieq_constr=3*N  # TEMOS 3 RESTRIÇÕES PARA CADA 'n'
-        )
-
-    def _evaluate(self, x, out, *args, **kwargs):
-        # 1. Extração das variáveis
-        T_val = x["T"]
-        f_vals = np.array([x[f"f_{n}"] for n in range(self.N)])
-        beta_vals = np.array([x[f"beta_{n}"] for n in range(self.N)])
-        psi_vals = np.array([x[f"psi_{n}"] for n in range(self.N)])
-        theta_vals = np.array([x[f"theta_{n}"] for n in range(self.N)])
-
-        # Impor limites artificialmente no evaluate
-        f_vals = np.clip(f_vals, self.f_min, self.f_max)
-        psi_vals = np.maximum(psi_vals, 1)
-        theta_vals = np.clip(theta_vals, 0.001, 0.999)
-
-        # 2. Cálculo das Funções G(theta) e Psi(theta)
-        # G(theta_n) = - log(1 - epsilon_0) / theta_n
-        G_theta = -np.log2(1 - self.epsilon_0) / theta_vals
-        
-        # Psi(theta_n) = - log(1 - theta_n)
-        Psi_theta = -np.log2(1 - theta_vals)
-
-        # ====================================
-        # FUNÇÕES OBJETIVO
-        # ====================================
-        # f1: min \sum (beta_n * psi_n * G(theta_n) * (alpha_n/2) * c_n * S_n * f_n^2)
-        obj1 = np.sum(beta_vals * psi_vals * G_theta * (self.alpha / 2) * self.c * self.S * (f_vals**2))
-        
-        # f2: max \sum beta_n -> min -\sum beta_n
-        obj2 = -np.sum(beta_vals)
-        
-        # f3: min G(theta_n) * T
-        # Assumindo que queremos minimizar o tempo total ponderado pelos clientes selecionados
-        # (Se a intenção for pegar o tempo máximo do pior cliente, use: np.max(beta_vals * G_theta) * T_val)
-        obj3 = np.sum(beta_vals * G_theta * T_val)
-        
-        # ====================================
-        # RESTRIÇÕES (g <= 0)
-        # ====================================
-        # g1: (psi_n * c_n * S_n / f_n) <= T  ==>  (psi_n * c_n * S_n / f_n) - T <= 0
-        g1 = (psi_vals * self.c * self.S / f_vals) - T_val
-        
-        # g2: psi_n >= Psi(theta_n)  ==>  Psi(theta_n) - psi_n <= 0
-        g2 = Psi_theta - psi_vals
-        
-        # g3: beta_n * theta_n >= beta_n * theta_n^{t-1}  ==>  beta_n * (theta_n^{t-1} - theta_n) <= 0
-        g3 = beta_vals * (self.theta_prev - theta_vals)
-        
-        # O Pymoo exige que todas as restrições sejam passadas como uma lista/array 1D
-        g_all = np.concatenate([g1, g2, g3])
-        
-        # Atribuindo saídas
-        out["F"] = [obj1, obj2, obj3]
-        out["G"] = g_all
-
-# ======================================================================
 # 3. CONFIGURAÇÃO E EXECUÇÃO DO ALGORITMO
 # ======================================================================
-problem = FederatedLearningProblem(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev)
-
-# Instanciando operadores para variáveis mistas
-dup_elim = MixedVariableDuplicateElimination()
-mating_op = MixedVariableMating(eliminate_duplicates=dup_elim)
-
-algorithm = NSGA2(
-    pop_size=150,
-    sampling=MixedVariableSampling(),
-    mating=mating_op,
-    eliminate_duplicates=dup_elim
-)
+instancia=FLPOPT(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev)
 
 print("Iniciando a otimização com 3 objetivos...")
-res = minimize(
-    problem,
-    algorithm,
-    seed=1,
-    save_history=True,
-    # verbose=True,
-    termination=('n_gen', 500) # Mais gerações costumam ser necessárias para 3 objetivos
-)
+res = instancia.solve(n_gen=500, seed=1, verbose=True)
 
 for solucao in res.F:
     solucao[1]=-solucao[1]
