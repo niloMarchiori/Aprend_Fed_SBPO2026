@@ -28,7 +28,7 @@ T_max = 500.0
 instancia=FLPOPT(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev)
 
 print("Iniciando a otimização com 3 objetivos...")
-res = instancia.solve(n_gen=1000, seed=1, pop_size=100, verbose=True)
+res = instancia.solve(n_gen=200, pop_size=100, verbose=False,seed=10)
 
 for solucao in res.F:
     solucao[1]=-solucao[1]
@@ -49,7 +49,7 @@ if res.F is not None:
     idx= instancia.mcdm_pseudo_weights(pesos,verbose=True)
 
     #--- SOLUÇÃO SELECIONADA PELO MÉTODO DE MCDM (High Tradeoff Points) ---#
-    idx_knee = instancia.mcdm_knee_point(verbose=True)
+    # idx_knee = instancia.mcdm_knee_point(verbose=True)
     
     
     
@@ -58,6 +58,3 @@ if res.F is not None:
             
 else:
     print("Nenhuma solução viável foi encontrada. Considere aumentar T_max ou ajustar theta_prev.")
-
-
-

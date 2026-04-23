@@ -4,7 +4,7 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.core.variable import Real, Integer, Binary
 
 class FederatedLearningProblem(ElementwiseProblem):
-    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min=1.0, T_max=500.0):
+    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev=0.01, T_min=1.0, T_max=500.0,beta_h=None):
         self.N = N
         self.alpha = alpha
         self.c = c
@@ -13,6 +13,9 @@ class FederatedLearningProblem(ElementwiseProblem):
         self.f_max = f_max
         self.epsilon_0 = epsilon_0
         self.theta_prev = theta_prev
+        self.beta_h=beta_h
+        if not beta_h:
+            self.beta_h=np.zeros(N)
         
         # Construindo o dicionário de Variáveis Mistas
         vars_dict = {}
@@ -63,6 +66,7 @@ class FederatedLearningProblem(ElementwiseProblem):
         obj1 = np.sum(beta_vals * psi_vals * G_theta * (self.alpha / 2) * self.c * self.S * (f_vals**2))
         
         # f2: max \sum beta_n -> min -\sum beta_n
+        pbj2= beta_vals*(1+(self.S/self.S.sum())*self.beta_h)
         obj2 = -np.sum(beta_vals)
         
         # f3: min G(theta_n) * T

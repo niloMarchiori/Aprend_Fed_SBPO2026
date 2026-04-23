@@ -13,9 +13,9 @@ class FLPOPT:
         self.problem = FederatedLearningProblem(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min, T_max)
         self.res = None
 
-    def solve(self, n_gen=500, seed=1, verbose=False,save_history=False, pop_size=150):
+    def solve(self, n_gen=500, pop_size=150, **kwargs):
         self.solver = FLSolver(self.problem,pop_size=pop_size)
-        self.res=self.solver.solve(n_gen=n_gen, seed=seed, verbose=verbose, save_history=save_history)
+        self.res=self.solver.solve(n_gen=n_gen, **kwargs)
         for solucao in self.res.F:
             solucao[1]=-solucao[1]
         return self.res
