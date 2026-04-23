@@ -36,17 +36,21 @@ columns+=[f'psi_{i}' for i in range(N)]
 
 df=pd.DataFrame(columns=columns)
 
-for t in range(20):
+T=T_max
+t=0
+while T_max >0.01 and t<10:
     print(f"Iniciando a otimização rodada {t}")
-    res = instancia.solve(n_gen=200, pop_size=100, verbose=False,seed=10)
+    res = instancia.solve(n_gen=200, pop_size=150)
 
-    print("\n--- DETALHAMENTO DAS SOLUÇÕES DA FRONTEIRA DE PARETO ---")
-    
     pesos = [0.3, 0.4, 0.3]
     idx= instancia.mcdm_pseudo_weights(pesos,verbose=True)
     solucao_vars=res.X[idx]
-    instancia.problem.beta_h+=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
-    df.append(solucao_vars)
+
+    instancia.beta_h+=1-np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
+    instancia.theta_prev=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
+    df.loc[len(df)]=solucao_vars
+    T=res.F[3]
+    t+=1
 
 df.to_csv('saida.csv')
 

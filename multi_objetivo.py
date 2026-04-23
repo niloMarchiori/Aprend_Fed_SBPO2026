@@ -28,10 +28,7 @@ T_max = 500.0
 instancia=FLPOPT(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev)
 
 print("Iniciando a otimização com 3 objetivos...")
-res = instancia.solve(n_gen=200, pop_size=100, verbose=False,seed=10)
-
-for solucao in res.F:
-    solucao[1]=-solucao[1]
+res = instancia.solve(n_gen=200, pop_size=100, seed=1)
 
 # ======================================================================
 # 4. EXIBIÇÃO DOS RESULTADOS E PLOTAGEM
@@ -53,7 +50,7 @@ if res.F is not None:
     
     
     
-    instancia.scatterplot()
+    # instancia.scatterplot()
     
             
 else:

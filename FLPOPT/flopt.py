@@ -1,3 +1,4 @@
+import numpy as np
 from .solver import FLSolver
 from .problem import FederatedLearningProblem
 from .flopt_util import print_solution_details
@@ -12,12 +13,31 @@ class FLPOPT:
         self.S=S
         self.problem = FederatedLearningProblem(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min, T_max)
         self.res = None
+        self._beta_h=np.zeros(N)
+        self._theta_prev=theta_prev
+
+    @property
+    def beta_h(self):
+        return self._beta_h
+
+    @beta_h.setter
+    def beta_h(self,beta_h:np.array):
+        self._beta_h=beta_h
+        self.problem.beta_h=beta_h
+
+    @property
+    def theta_prev(self):
+        return self._theta_prev
+
+    @beta_h.setter
+    def theta_prev(self,theta:np.array):
+        self._theta_prev=theta
+        self.problem.theta_prev=theta
+
 
     def solve(self, n_gen=500, pop_size=150, **kwargs):
         self.solver = FLSolver(self.problem,pop_size=pop_size)
         self.res=self.solver.solve(n_gen=n_gen, **kwargs)
-        for solucao in self.res.F:
-            solucao[1]=-solucao[1]
         return self.res
 
     def scatterplot(self):
