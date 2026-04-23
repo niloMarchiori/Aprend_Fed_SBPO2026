@@ -46,8 +46,11 @@ while T_max >0.01 and t<10:
     idx= instancia.mcdm_pseudo_weights(pesos,verbose=True)
     solucao_vars=res.X[idx]
 
-    instancia.beta_h+=1-np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
-    instancia.theta_prev=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
+    beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
+    instancia.beta_h+=1-beta_t
+
+    theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
+    instancia.theta_prev=beta_t*theta_t + (1-beta_t)*instancia.theta_prev
     df.loc[len(df)]=solucao_vars
     T=res.F[3]
     t+=1

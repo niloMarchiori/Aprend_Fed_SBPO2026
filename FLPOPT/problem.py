@@ -70,9 +70,7 @@ class FederatedLearningProblem(ElementwiseProblem):
         obj2 = -np.sum(obj2)
         
         # f3: min G(theta_n) * T
-        # Assumindo que queremos minimizar o tempo total ponderado pelos clientes selecionados
-        # (Se a intenção for pegar o tempo máximo do pior cliente, use: np.max(beta_vals * G_theta) * T_val)
-        obj3 = np.sum(beta_vals * G_theta * T_val)
+        obj3 = np.max(beta_vals * G_theta) * T_val
         
         # ====================================
         # RESTRIÇÕES (g <= 0)
