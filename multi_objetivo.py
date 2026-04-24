@@ -42,7 +42,7 @@ if res.F is not None:
     #     print_solution_details(N, objs, solucao_vars, c, S)
 
     #--- SOLUÇÃO SELECIONADA PELO MÉTODO DE MCDM (PSEUDO PESOS) ---#
-    pesos = [0.3, 0.4, 0.3]  # Exemplo de pesos para os objetivos
+    pesos = [0.1, 0.8, 0.1]  # Exemplo de pesos para os objetivos
     idx= instancia.mcdm_pseudo_weights(pesos,verbose=True)
 
     #--- SOLUÇÃO SELECIONADA PELO MÉTODO DE MCDM (High Tradeoff Points) ---#

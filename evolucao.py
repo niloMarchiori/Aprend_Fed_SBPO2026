@@ -21,7 +21,7 @@ theta_prev = np.ones(N) * 0.1    # Theta no tempo t-1 para a restrição de evol
 
 # Limites para a nova variável contínua T
 T_min = 1.0
-T_max = 500.0
+T_max = 2**16
 
 # ======================================================================
 # 3. CONFIGURAÇÃO E EXECUÇÃO DO ALGORITMO
@@ -38,21 +38,21 @@ df=pd.DataFrame(columns=columns)
 
 T=T_max
 t=0
-while T_max >0.01 and t<10:
-    print(f"Iniciando a otimização rodada {t}")
-    res = instancia.solve(n_gen=200, pop_size=150)
-
-    pesos = [0.3, 0.4, 0.3]
-    idx= instancia.mcdm_pseudo_weights(pesos,verbose=True)
+while T_max >0.01 and t<40:
+    print(f"\n --------RODADA {t}--------")
+    res = instancia.solve(n_gen=200, pop_size=150, seed=1)
+    pesos = [0.1, 0.4, 0.5]
+    idx= instancia.mcdm_pseudo_weights(pesos, verbose=True)
+    instancia.scatterplot(file_name=f'Figuras/saida{t}.png')
     solucao_vars=res.X[idx]
+
+    instancia.mcdm_knee_point(verbose=True)
 
     beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
     instancia.beta_h+=1-beta_t
-
     theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
-    instancia.theta_prev=beta_t*theta_t + (1-beta_t)*instancia.theta_prev
+    instancia.theta_prev=np.where(beta_t == 1, theta_t, instancia.theta_prev)
     df.loc[len(df)]=solucao_vars
-    T=res.F[3]
     t+=1
 
 df.to_csv('saida.csv')

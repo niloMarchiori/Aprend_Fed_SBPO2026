@@ -29,7 +29,7 @@ class FLPOPT:
     def theta_prev(self):
         return self._theta_prev
 
-    @beta_h.setter
+    @theta_prev.setter
     def theta_prev(self,theta:np.array):
         self._theta_prev=theta
         self.problem.theta_prev=theta
@@ -40,12 +40,14 @@ class FLPOPT:
         self.res=self.solver.solve(n_gen=n_gen, **kwargs)
         return self.res
 
-    def scatterplot(self):
+    def scatterplot(self,file_name=None):
         if self.res is not None and self.res.F is not None:
             plot = Scatter(title="Fronteira de Pareto (3 Objetivos)", angle=(45, 45))
             plot.add(self.res.F)
-            plot.save("saida")
-            plot.show()
+            if not file_name:
+                plot.show()
+            else:
+                plot.save(file_name)
         else:
             print("Nenhuma solução encontrada para plotar.")
 

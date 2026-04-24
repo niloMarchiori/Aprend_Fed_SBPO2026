@@ -14,7 +14,7 @@ class FederatedLearningProblem(ElementwiseProblem):
         self.epsilon_0 = epsilon_0
         self.theta_prev = theta_prev
         self.beta_h=beta_h
-        if not beta_h:
+        if beta_h is None:
             self.beta_h=np.zeros(N)
         
         # Construindo o dicionário de Variáveis Mistas
@@ -29,14 +29,14 @@ class FederatedLearningProblem(ElementwiseProblem):
             # beta_n (Binária)
             vars_dict[f"beta_{n}"] = Binary()
             # psi_n (Inteira) - N*
-            vars_dict[f"psi_{n}"] = Integer(bounds=(1, 100))
+            vars_dict[f"psi_{n}"] = Integer(bounds=(1, 2**10))
             # theta_n (Contínua) - Limitada em [0.01, 0.99] para evitar div/0 e log(0)
-            vars_dict[f"theta_{n}"] = Real(bounds=(0.01, 0.99))
+            vars_dict[f"theta_{n}"] = Real(bounds=(0.01, 0.9999))
             
         super().__init__(
             vars=vars_dict,
             n_obj=3,          # AGORA TEMOS 3 OBJETIVOS
-            n_ieq_constr=3*N  # TEMOS 3 RESTRIÇÕES PARA CADA 'n'
+            n_ieq_constr=3*N +1 # TEMOS 3 RESTRIÇÕES PARA CADA 'n'
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -66,11 +66,14 @@ class FederatedLearningProblem(ElementwiseProblem):
         obj1 = np.sum(beta_vals * psi_vals * G_theta * (self.alpha / 2) * self.c * self.S * (f_vals**2))
         
         # f2: max \sum beta_n -> min -\sum beta_n
-        obj2= beta_vals*(1+(self.S/self.S.sum())*(1-self.beta_h))
+        rec=(self.S/self.S.sum())*(self.beta_h)
+        obj2= beta_vals*(1+rec)
         obj2 = -np.sum(obj2)
         
         # f3: min G(theta_n) * T
-        obj3 = np.max(beta_vals * G_theta) * T_val
+        # Assumindo que queremos minimizar o tempo total ponderado pelos clientes selecionados
+        # (Se a intenção for pegar o tempo máximo do pior cliente, use: np.max(beta_vals * G_theta) * T_val)
+        obj3 = G_theta.max() * T_val
         
         # ====================================
         # RESTRIÇÕES (g <= 0)
@@ -82,10 +85,12 @@ class FederatedLearningProblem(ElementwiseProblem):
         g2 = Psi_theta - psi_vals
         
         # g3: beta_n * theta_n >= beta_n * theta_n^{t-1}  ==>  beta_n * (theta_n^{t-1} - theta_n) <= 0
-        g3 = beta_vals * (self.theta_prev - theta_vals)
+        g3 = beta_vals * (self.theta_prev*0.99 - theta_vals)
+
+        g4 = np.array([1 - beta_vals.sum()])
         
         # O Pymoo exige que todas as restrições sejam passadas como uma lista/array 1D
-        g_all = np.concatenate([g1, g2, g3])
+        g_all = np.concatenate([g1, g2, g3, g4])
         
         # Atribuindo saídas
         out["F"] = [obj1, obj2, obj3]
