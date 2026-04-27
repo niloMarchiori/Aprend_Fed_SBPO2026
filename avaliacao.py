@@ -35,7 +35,7 @@ columns+=[f'psi_{i}' for i in range(N)]
 
 T=T_max
 t=0
-NUM_RODADAS=2
+NUM_RODADAS=60
 dados_metricas=[{f'Rodada_{i}':None} for i in range(NUM_RODADAS)]
 dados_solucao_escolhida=[{}]*NUM_RODADAS
 while t<NUM_RODADAS:
