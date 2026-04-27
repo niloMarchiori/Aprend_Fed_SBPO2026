@@ -34,10 +34,10 @@ columns+=[f'theta_{i}' for i in range(N)]
 columns+=[f'psi_{i}' for i in range(N)]
 
 T=T_max
-t=0
 NUM_RODADAS=60
 dados_metricas=[{f'Rodada_{i}':None} for i in range(NUM_RODADAS)]
 dados_solucao_escolhida=[{}]*NUM_RODADAS
+t=0
 while t<NUM_RODADAS:
     print(f'Rodada t={t}')
     df_cru, df_estatisticas, pf_empirica = avaliar_desempenho_nsgaii(
@@ -48,7 +48,7 @@ while t<NUM_RODADAS:
     )
 
     dados_metricas[t]=df_estatisticas
-    
+    print(df_estatisticas)    
     
     res = instancia.solve(n_gen=200, pop_size=150, seed=1)
     pesos = [0.3, 0.4, 0.3]
@@ -61,8 +61,16 @@ while t<NUM_RODADAS:
     theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
     instancia.theta_prev=np.where(beta_t == 1, theta_t, instancia.theta_prev)
     t+=1
-print(dados_metricas)
+
 df_metricas = pd.concat(dados_metricas, keys=[f'Rodada_{i}' for i in range(NUM_RODADAS)])
-df_metricas.to_csv('dados_metricas.csv')
+
+# Damos nomes aos índices para que não fiquem colunas vazias
+df_metricas.index.names = ['Rodada', 'Metrica']
+
+# O reset_index() transforma esses índices (Rodada e Metrica) em colunas normais de dados
+df_metricas = df_metricas.reset_index()
+
+# Agora salvamos passando index=False para não gerar nenhum índice numérico extra
+df_metricas.to_csv('dados_metricas.csv', index=False)
 df=pd.DataFrame(dados_solucao_escolhida)
 df.to_csv('solucoes_teoricas.csv')
