@@ -22,7 +22,7 @@ def print_solution_details(N,objs, solucao_vars,c,s):
 
 
 
-def avaliar_desempenho_nsgaii(problema, n_runs=10, n_gen=200, pop_size=150):
+def avaliar_desempenho_nsgaii(instancia, n_runs=10, n_gen=200, pop_size=150):
     """
     Executa o NSGA-II múltiplas vezes e retorna a análise estatística de 
     Hipervolume (HV) e Inverted Generational Distance (IGD).
@@ -45,10 +45,9 @@ def avaliar_desempenho_nsgaii(problema, n_runs=10, n_gen=200, pop_size=150):
     for semente in range(n_runs):
         print(f" -> Rodada {semente+1}/{n_runs} (Seed: {semente})", end="\r")
         
-        res = minimize(
-            problema,
-            algorithm,
-            termination=('n_gen', n_gen),
+        res = instancia.solve(
+            n_gen=n_gen,
+            pop_size=pop_size,
             seed=semente,
             verbose=False
         )
@@ -60,30 +59,43 @@ def avaliar_desempenho_nsgaii(problema, n_runs=10, n_gen=200, pop_size=150):
     print("\nExecuções finalizadas. Calculando fronteira empírica...")
     
     # PASSO 2: Criando a Fronteira de Pareto Empírica (Aproximação do Ótimo)
-    # Empilhamos todos os indivíduos de todas as execuções
     todas_solucoes = np.vstack(historico_F)
-    
-    # Extraímos apenas as soluções não-dominadas deste grupão
     I = NonDominatedSorting().do(todas_solucoes, only_non_dominated_front=True)
     fronteira_empirica = todas_solucoes[I]
     
-    # PASSO 3: Definindo o Ponto de Referência (Nadir) para o Hipervolume
-    # Pega o pior caso de cada objetivo na fronteira e adiciona 5% de margem
-    nadir_point = fronteira_empirica.max(axis=0) * 1.05 
+    # =========================================================
+    # PASSO 3: NORMALIZAÇÃO DOS OBJETIVOS (CORREÇÃO CRÍTICA)
+    # =========================================================
+    # Encontra o melhor (Ideal) e pior (Nadir) valor de cada objetivo
+    ideal_point = fronteira_empirica.min(axis=0)
+    nadir_point = fronteira_empirica.max(axis=0)
     
-    # Inicializando as calculadoras de métricas do pymoo
-    ind_hv = Hypervolume(ref_point=nadir_point)
-    ind_igd = IGD(fronteira_empirica)
+    # Proteção contra divisão por zero (caso a fronteira colapse e Ideal == Nadir)
+    denominador = nadir_point - ideal_point
+    denominador[denominador == 0] = 1e-9 
     
+    # Normaliza a fronteira empírica para o intervalo [5]
+    F_norm_empirica = (fronteira_empirica - ideal_point) / denominador
+    
+    # Agora o ponto de referência para o Hipervolume pode ser um vetor fixo
+    # Ex: [1.05, 1.05, 1.05] (Ponto Nadir normalizado de [5] + 5% de folga)
+    ref_point_norm = np.ones(instancia.problem.n_obj) * 1.05
+    
+    ind_hv = Hypervolume(ref_point=ref_point_norm)
+    ind_igd = IGD(F_norm_empirica)
+    
+    # =========================================================
     # PASSO 4: Calculando as métricas para CADA execução individual
+    # =========================================================
     resultados_metricas = []
     
     for F_rodada in historico_F:
-        # Calcula HV
-        hv_val = ind_hv.do(F_rodada)
+        # Normaliza a rodada atual usando os mesmos limites (Ideal e Nadir)
+        F_norm_rodada = (F_rodada - ideal_point) / denominador
         
-        # Calcula IGD
-        igd_val = ind_igd.do(F_rodada)
+        # Calcula HV e IGD no espaço normalizado
+        hv_val = ind_hv.do(F_norm_rodada)
+        igd_val = ind_igd.do(F_norm_rodada)
         
         resultados_metricas.append({
             "Hypervolume": hv_val,

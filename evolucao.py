@@ -42,11 +42,9 @@ while T_max >0.01 and t<40:
     print(f"\n --------RODADA {t}--------")
     res = instancia.solve(n_gen=200, pop_size=150, seed=1)
     pesos = [0.1, 0.4, 0.5]
-    idx= instancia.mcdm_pseudo_weights(pesos, verbose=True)
+    idx= instancia.mcdm_pseudo_weights(pesos)
     instancia.scatterplot(file_name=f'Figuras/saida{t}.png')
     solucao_vars=res.X[idx]
-
-    instancia.mcdm_knee_point(verbose=True)
 
     beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
     instancia.beta_h+=1-beta_t
@@ -55,5 +53,5 @@ while T_max >0.01 and t<40:
     df.loc[len(df)]=solucao_vars
     t+=1
 
-df.to_csv('saida.csv')
+df.to_csv('evolucao_teorica.csv')
 

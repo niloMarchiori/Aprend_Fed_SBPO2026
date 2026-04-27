@@ -33,33 +33,36 @@ columns+=[f'beta_{i}' for i in range(N)]
 columns+=[f'theta_{i}' for i in range(N)]
 columns+=[f'psi_{i}' for i in range(N)]
 
-df=pd.DataFrame(columns=columns)
-
 T=T_max
 t=0
-while t<60:
-
+NUM_RODADAS=2
+dados_metricas=[{f'Rodada_{i}':None} for i in range(NUM_RODADAS)]
+dados_solucao_escolhida=[{}]*NUM_RODADAS
+while t<NUM_RODADAS:
+    print(f'Rodada t={t}')
     df_cru, df_estatisticas, pf_empirica = avaliar_desempenho_nsgaii(
-        problema=instancia, 
-        n_runs=20,       # Pelo menos 10 rodadas
+        instancia=instancia, 
+        n_runs=30,       # Pelo menos 10 rodadas
         n_gen=200, 
         pop_size=150
     )
 
-    df_cru.save(f'Metricas/Dados_Originais/dados_originais_{t}.csv')
-    df_estatisticas.save(f'Metricas/Estatisticas/estatisticas_{t}.csv')
+    dados_metricas[t]=df_estatisticas
     
     
     res = instancia.solve(n_gen=200, pop_size=150, seed=1)
     pesos = [0.3, 0.4, 0.3]
-    idx= instancia.mcdm_pseudo_weights(pesos, verbose=True)
+    idx= instancia.mcdm_pseudo_weights(pesos)
     solucao_vars=res.X[idx]
+    dados_solucao_escolhida[t]=solucao_vars
 
     beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
     instancia.beta_h+=1-beta_t
     theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
     instancia.theta_prev=np.where(beta_t == 1, theta_t, instancia.theta_prev)
     t+=1
-
-df.to_csv('saida.csv')
-
+print(dados_metricas)
+df_metricas = pd.concat(dados_metricas, keys=[f'Rodada_{i}' for i in range(NUM_RODADAS)])
+df_metricas.to_csv('dados_metricas.csv')
+df=pd.DataFrame(dados_solucao_escolhida)
+df.to_csv('solucoes_teoricas.csv')
