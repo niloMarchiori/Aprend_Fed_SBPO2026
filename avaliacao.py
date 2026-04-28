@@ -38,30 +38,35 @@ NUM_RODADAS=60
 dados_metricas=[{f'Rodada_{i}':None} for i in range(NUM_RODADAS)]
 dados_solucao_escolhida=[{}]*NUM_RODADAS
 t=0
-while t<NUM_RODADAS:
-    print(f'Rodada t={t}')
-    df_cru, df_estatisticas, pf_empirica = avaliar_desempenho_nsgaii(
-        instancia=instancia, 
-        n_runs=30,       # Pelo menos 10 rodadas
-        n_gen=200, 
-        pop_size=150
-    )
+try:
+    while t<NUM_RODADAS:
+        print(f'Rodada t={t}')
+        df_cru, df_estatisticas, pf_empirica = avaliar_desempenho_nsgaii(
+            instancia=instancia, 
+            n_runs=50,       # Pelo menos 10 rodadas
+            n_gen=200, 
+            pop_size=150
+        )
 
-    dados_metricas[t]=df_estatisticas
-    print(df_estatisticas)    
+        dados_metricas[t]=df_estatisticas
+        print(df_estatisticas)    
+        
+        res = instancia.solve(n_gen=200, pop_size=150, seed=1)
+        pesos = [0.3, 0.4, 0.3]
+        idx= instancia.mcdm_pseudo_weights(pesos)
+        solucao_vars=res.X[idx]
+
+        solucao_vars['exec_time']=res.exec_time
+        dados_solucao_escolhida[t]=solucao_vars
+
+        beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
+        instancia.beta_h+=1-beta_t
+        theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
+        instancia.theta_prev=np.where(beta_t == 1, theta_t, instancia.theta_prev)
+        t+=1
+except Exception as e:
+    print(f'Erro durante a execução: {e}')
     
-    res = instancia.solve(n_gen=200, pop_size=150, seed=1)
-    pesos = [0.3, 0.4, 0.3]
-    idx= instancia.mcdm_pseudo_weights(pesos)
-    solucao_vars=res.X[idx]
-    dados_solucao_escolhida[t]=solucao_vars
-
-    beta_t=np.array([solucao_vars[f'beta_{n}'] for n in range(N)])
-    instancia.beta_h+=1-beta_t
-    theta_t=np.array([solucao_vars[f'theta_{n}'] for n in range(N)])
-    instancia.theta_prev=np.where(beta_t == 1, theta_t, instancia.theta_prev)
-    t+=1
-
 df_metricas = pd.concat(dados_metricas, keys=[f'Rodada_{i}' for i in range(NUM_RODADAS)])
 
 # Damos nomes aos índices para que não fiquem colunas vazias
