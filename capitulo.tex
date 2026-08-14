@@ -1,0 +1,335 @@
+\chapter{Definição de uma instância para o problema proposto e sua solução heurística}
+\label{ch:sol_heuristica}
+
+Este capítulo consolida a transição entre a formulação teórica do problema e a sua resolução algorítmica. O principal objetivo é definir um cenário computacional realista e aplicar a meta-heurística construída para encontrar soluções eficientes para o Aprendizado Federado. 
+
+O texto está estruturado em duas partes fundamentais. Inicialmente, a \cref{subsec:abiente_emulacao} detalha a montagem do ambiente de emulação, etapa na qual os perfis de \textit{hardware} dos dispositivos virtuais são parametrizados, calibra-se o modelo analítico de potência das CPUs e constrói-se a instância do problema baseada em dados empíricos reais. Em seguida, a \cref{sec:aplicacao_nsga2} apresenta a adaptação da meta-heurística NSGA-II ao problema. Nessa etapa são introduzidas as customizações genéticas do \textit{framework} projetadas para atuar sobre as não-linearidades do problema, seguidas por uma análise aprofundada de como o otimizador opera e respeita ativamente as severas restrições impostas sobre a instância recém-criada.
+
+\section{Ambiente de Emulação}
+\label{subsec:abiente_emulacao}
+
+Para validação da metodologia proposta, uma rede de AF foi emulada com a ferramenta MininetFed \cite{mininetfed}. Nesses experimentos os dispositivos virtuais são emulados por containers Docker, e possuem poder computacional distinto. A ferramenta permite atribuir a cada container o uso de apenas algumas das CPUs do máquina \textit{host} da emulação, se aproximando do que seria dispositivos individuais. Para complementar essa heterogenicidade dos dispositivos, a frequência de CPU de cada \textit{container} era limitada de acordo com os limites $f_n^{max}$ e $f_n^{min}$ definidos a \textit{priori}. 
+
+A ferramenta MininetFed herda do Containernet uma função que emula o consumo de cada dispositivo baseado na corrente, tenção de alimentação e porcentagem de uso de CPU \cite{johann:sbrc}, entretanto essa modelagem não se demonstrou sensível a variações da frequência de CPU, como previsto por \citeonline{burd:96,vogeleer:cpu_power}. Então uma nova função de consumo foi construída baseada no seguinte modelo: 
+
+\begin{equation}
+    P(f,V)=(1-\gamma \cdot V) \cdot \alpha\cdot f\cdot V^2, 
+    \label{eq:modelo_potencia}
+\end{equation}
+
+\noindent em que a potência $P$ (em Watts) depende da frequência de operação $f$ e tensão $V$ em que a CPU opera, sendo a constante $\gamma$ associada a perdas por aquecimento, e $\alpha$ a capacitância efetiva do \textit{chipset} \cite{vogeleer:cpu_power}.
+
+E então 11 clientes (estações) foram configurados para executarem o treinamento, segundo a configuração da \cref{tab:sta_fit_alpha}. Nessa etapa todos os dispositivos participaram em todas as 60 rodadas de treinamento, iniciando a primeira rodada com frequência mínima e na última rodada com frequência máxima, aumentando em incrementos iguais a cada rodada. Cada um dos \textit{containers} teve acesso a 2 núcleos de processamento, sem sobreposição, ocupando 22 dos 24 \textit{cores} disponíveis no \textit{host}.
+
+\begin{table}[H]
+        \centering
+        \begin{tabular}{c|c|c|c|c}
+        DC         & $d_i$ & $f^{max}\ (GHz)$ & $f^{min}\ (GHz)$ & ID Núcleo físico alocado \\
+        \hline    
+        $ DC_0$  &                         10\ 000  &         0.9      &  4.0    & 0, 23 \\
+        $ DC_1$  &                         10\ 000  &         0.9      &  4.0    & 1, 22 \\
+        $ DC_2$  &                         10\ 000  &         0.9      &  4.0   & 2, 21 \\
+        $ DC_3 $ &                         10\ 000  &         0.9      &  4.0   & 3, 20 \\
+        $ DC_4  $&                         10\ 000  &         0.9      &  4.0   & 4, 19 \\
+        $ DC_5 $ &                         10\ 000  &         0.9      &  4.0    & 5, 18 \\
+        $ DC_6 $ &                         10\ 000  &         0.9      &  4.0    & 6, 17 \\
+        $ DC_7 $  &                         10\ 000  &         0.9      &  4.0    & 7, 16 \\
+        $ DC_8  $&                         10\ 000  &         0.9      &  4.0    & 8, 15 \\
+        $ DC_9 $  &                         10\ 000  &         0.9      &  4.0    & 9, 14 \\
+        $ DC_10$  &                         10\ 000  &         0.9      &  4.0    & 10, 13 \\
+        \hline
+        \end{tabular}
+        %\vspace{-0.2cm}
+        \caption{Configuração dos DCs candidatos ao treinamento.}
+        \label{tab:sta_fit_alpha}
+    \end{table}
+
+O sistema Linux disponibiliza um arquivo para leitura que exibe o consumo da máquina enquanto ela esteve ligada, esse valor é global para todo computador, então como aproximação, considerando que todos os dispositivos disputam igualmente o consumo, internamente cada um deles faz a leitura e considera que consumiu $1/11$ dessa quantidade. Essa aproximação se sustenta plausível uma vez que todos os DCs possuem a mesma configuração.  
+
+\begin{table}[H]
+        \centering
+        \begin{tabular}{c|c|c|c}
+        DC         & $\alpha$ & $\gamma$ & ID dos Núcleo físico alocado \\\hline
+            
+        $ DC_0 $ &  $5.128\cdot 10^{-9} $   &       0.62         & 0, 23 \\
+        $ DC_1$  &  $5.06\cdot 10^{-9}  $   &       0.61         & 1, 22 \\
+        $ DC_2$  &  $5.08\cdot 10^{-9}  $   &       0.62         & 2, 21 \\
+        $ DC_3 $ &  $5.185\cdot 10^{-9} $   &       0.63         & 3, 20 \\
+        $ DC_4  $&  $5.133\cdot 10^{-9} $   &       0.62         & 4, 19 \\
+        $ DC_5 $ & $ 5.119\cdot 10^{-9}$    &       0.62         & 5, 18 \\
+        $ DC_6 $ & $ 5.095\cdot 10^{-9}$    &       0.62         & 6, 17 \\
+        $ DC_7 $  & $ 5.056\cdot 10^{-9}$    &       0.62         & 7, 16 \\
+        $ DC_8  $& $ 4.879\cdot 10^{-9}$    &       0.62         & 8, 15 \\
+        $ DC_9 $  &  $4.795\cdot 10^{-9} $   &       0.61         & 9, 14 \\
+        $ DC_{10}$  & $4.91\cdot 10^{-9} $    &       0.62         & 10, 13 \\
+        \hline
+        \end{tabular}
+        %\vspace{-0.2cm}
+        \caption{ Constantes de \textit{hardware} associadas ao consumo ajustadas conforme modelo de \citeonline{burd:96}}
+        \label{tab:valores_constantes_fit}
+    \end{table}
+
+Ao ler o consumo em intervalos de 0.1 segundos, é obtido a potência instantânea aproximada, junto com os valores de frequência e tensão naquele instante. Os resultados desses valores são exibidos nos gráficos da \cref{fig:experimental_p_v_f}. De posse dessas medidas experimentais, uma curva da forma da \cref{eq:modelo_potencia} foi ajustada, e as constantes obtidas são apresentadas na \cref{tab:valores_constantes_fit}, enquanto o traçado do modelo obtido a partir dessas constantes é apresentado visualmente na \cref{fig:fit_potencia} para cada um dos dispositivos. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figuras/calibragem/fit_alpha_p_f_v_1.eps}
+    \caption{Valores experimentais para potência, frequência e tensão em 9 experimentos subsequentes.}
+    \label{fig:experimental_p_v_f}
+\end{figure}
+
+O esperado é que ao configurar dispositivos alocados nos mesmos núcleos físicos conforme esse experimento, suas fonções de potência $P(f,V)$ são idênticas às apresentadas de acordo com a \cref{fig:fit_potencia} e \cref{tab:sta_fit_alpha}, mas se por exemplo usarmos menos dispositivos essa calibragem deverá ser refeita para encontrar novos valores mais condizentes. Até mesmo em uma configuração com 11 dispositivos, como essa, mas que um dos dispositivos usar simultaneamente os núcleos 0 e 2, o esperado é que o ajuste atual não seja o mais adequado, embora a \cref{tab:sta_fit_alpha} demonstre que todos os valores de $\alpha$ são semelhantes.
+
+\begin{figure}[htb]
+    \centering
+    \includegraphics[width=1\linewidth]{figuras/calibragem/fit_alpha_fit_3.eps}
+    \caption{Ajuste dos valores experimentes de potência $P$ em função de tensão $V$ e frequência de CPU $f$ de acordo com modelo da \cref{eq:modelo_potencia}}
+    \label{fig:fit_potencia}
+\end{figure}
+
+\subsection{Construção da instância}
+\label{subsec:construcao_instancia}
+
+Com as constantes de \textit{hardware} ajustadas, ainda nos resta ajustar as constantes $c_i$ do nosso modelo. Para isso, novamente 11 dispositivos foram emulados, com recursos conforme \cref{tab:sta_config_pre_fit}, e então o treinamento de 40 rodadas foi realizado por cada um deles.
+
+\begin{table}[H]
+        \centering
+        \begin{tabular}{c|c|c|c}
+            $CD_n$   & $S_n$\ (MB) & $f_n^{max}\ (GHz)$ & $f_n^{min}\ (GHz)$\\
+             \hline
+            $ DC_0  $ &  13.687    &       2.0    &  1.4         \\
+            $ DC_1$   &  12.537    &       1.8    &  1.5         \\
+            $ DC_2$   &  20.674    &       3.6    &  1.5         \\
+            $ DC_3 $  &  19.191	 &       2.3    &  1.4         \\
+            $ DC_4  $ &  7.9934    &       3.7    &  1.4         \\
+            $ DC_5 $  &  20.800    &       2.4    &  1.5         \\
+            $ DC_6 $  &  18.239    &       2.7    &  1.4         \\
+            $ DC_7 $   &  18.810    &       2.0    &  1.6         \\
+            $ DC_8  $ &  6.4550    &       2.9    &  2.6         \\
+            $ DC_9 $   &  20.198    &       3.6    &  2.6         \\
+            $ DC_{10}$  &  13.711    &       3.9    &  2.6          \\
+            \hline
+        \end{tabular}
+        \caption{Configuração dos DCs para experimento de obtenção da constante $c_i$.}
+        \label{tab:sta_config_pre_fit}
+    \end{table}
+
+Em cada uma das rodadas os clientes executaram o treinamento com uma frequência diferente, sendo cada um deles usando a frequência mínima $f^{min}_i$ na primeira rodada, e incrementando esse valor a cada rodada até atingir a 40ª com valor $f_i^{max}$ (Conforme \cref{tab:sta_config_pre_fit}). Sendo assim, na rodada $t$, a frequência de CPU do $ DC_i$ foi fixado em $f_i^t=f_i^{min}+\frac{(f_i^{min}-f_i^{min})}{40}\cdot t$. Os valores experimentais de 9 execuções desse experimetno são resumidos na \cref{fig:valores_experimentais_tempo_freq}. Um número maior de repetições do experimento foi necessário, pois embora fosse visível que existisse um comportamento do tipo $T\propto 1/f$, flutuações nos valores podem ser observados conforme as barras de incerteza da \cref{fig:valores_experimentais_tempo_freq}, possivelmente causados por cargas do sistema operacional (SO), tanto do \textit{host} quanto dos \textit{containers}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figuras/calibragem/analise_tempo_frequencia_plot_1.eps}
+    \caption{Valores experimentais para o comportamento entre tempo de treinamento e frequência de CPU, o gráfico apresenta nos pontos o valor médio obtido em 9 execuções do experimento com o desvio padrão apresentado.}
+    \label{fig:valores_experimentais_tempo_freq}
+\end{figure}
+
+Com valores da \cref{fig:valores_experimentais_tempo_freq}, uma curva foi ajustada conforme a seguinte equação:
+
+\begin{equation}
+    T_i=\dfrac{c_i\cdot S_i}{f_i-k_i}.
+    \label{eq:tempo_modelo_perda}
+\end{equation}
+
+\noindent Esse é um modelo teórico que, diferente da \cref{eq:t_cmp}, considera um valor $k_i$, que representa os ciclos de CPU que o SO consumiu \cite{vogeleer:cpu_power}. E assim o resultado do ajuste é ilustrado na \cref{fig:fit_tempo_freq}, mas uma análise detalhada dos valores também é apresentado na \cref{tab:sta_config}.
+
+Conforme \cref{fig:fit_tempo_freq}, é possível notar que as flutuações nas medidas existem. Em especial, o ajuste de curva para STA 1 pode ter sido prejudicado pelo alto desvio da medida de tempo em frequências mais baixas, uma vez que, visualmente, a curva se ajustou para os pontos com desvio mais baixo. Mas embora esse erro não seja desprezível, no geral o comportamento esperado ainda é qualitativamente evidente. Por outro lado, o valore de $k$ é foi considerado desprezível, uma vez que é $10^{19}$ ordem de grandezas menor que $f$.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figuras/calibragem/analise_tempo_frequencia_plot_2.eps}
+    \caption{Comparação entre curva ajustada e valores experimentais para a relação entre tempo de treinamento e frequência de operação.}
+    \label{fig:fit_tempo_freq}
+\end{figure}
+
+Como agora possuímos todas as constantes necessárias para construção do \ref{prob:pim}, a \cref{tab:sta_config} apresenta a configuração da instância de dispositivos que serão utilizados pelo decorrer do trabalho. 
+
+Importante mencionar que instâncias maiores não se apresentaram viáveis, principalmente por apresentarem valores quase aleatórios para a relação entre $T$ e $f$, possivelmente por sobrecarregarem o \textit{host}. Toda a simulação foi executada em um máquina com processador Intel(R) Core(TM) Ultra 9 285K, com 32 GB de memória RAM e placa de vídeo RTX 5060 (embora o uso da GPU não tenha sido liberada aos \textit{containers}). A implementação dos experimentos dessa seção estão disponíveis em \href{https://github.com/niloMarchiori/dissertacao_code/tree/calibrar_constantes}{$https://github.com/niloMarchiori/dissertacao_code/tree/calibrar\_constantes$}.
+
+\begin{table}
+        \centering
+        \begin{tabular}{c|c|c|c|c|c|c}
+            $CD_n$      & $S_n$ & $d_i$ &  $\alpha_i$ & $c_i$              & $f_n^{max}\ (GHz)$ & $f_n^{min}\ (GHz)$\\
+             \hline
+            $ DC_0  $ & 17260.0,  & 13.687    &   $5.128\cdot 10^{-9} $ &      25.63      & 2.0                &  1.4  \\
+            $ DC_1$   & 15810.0, &  12.537    &   $5.06\cdot 10^{-9}  $ &      25.53      & 1.8                &  1.5  \\
+            $ DC_2$   & 26070.0, &  20.674    &   $5.08\cdot 10^{-9}  $ &      30.28      & 3.6                &  1.5  \\
+            $ DC_3 $  &  24200.0, & 19.191	 &   $5.185\cdot 10^{-9} $ &      27.31      & 2.3                &  1.4  \\
+            $ DC_4  $ &  10080.0, & 7.9934    &   $5.133\cdot 10^{-9} $ &      31.48      & 3.7                &  1.4  \\
+            $ DC_5 $  & 26230.0, &  20.800    &  $ 5.119\cdot 10^{-9}$  &      29.0      & 2.4                &  1.5  \\
+            $ DC_6 $  & 23000.0, &  18.239    &  $ 5.095\cdot 10^{-9}$  &      30.3      & 2.7                &  1.4  \\
+            $ DC_7 $   & 23720.0, &  18.810    &  $ 5.056\cdot 10^{-9}$  &      27.93      & 2.0                &  1.6  \\
+            $ DC_8  $ & 8140.0, &  6.4550    &  $ 4.879\cdot 10^{-9}$  &      36.06      & 2.9                &  2.6  \\
+            $ DC_9 $   & 25470.0, & 20.198    &   $4.795\cdot 10^{-9} $ &      36.32      & 3.6                &  2.6  \\
+            $ DC_{10}$  & 17290.0 &  13.711    &  $4.0 \cdot 10^{-9} $  &      39.21      & 3.9                 &  2.6  \\
+            \hline
+        \end{tabular}
+        \caption{Configuração dos DCs candidatos ao treinamento.}
+        \label{tab:sta_config}
+    \end{table}
+
+
+\section{NSGA-II Aplicado ao \ref{prob:pim}}
+\label{sec:aplicacao_nsga2}
+
+Nessa seção apresentamos o \textit{framework} AFEA (Aprendizado Federado Evolutivo Adaptativo), que adapta a meta-heurística evolutiva NSGA-II, apresentado na \cref{subsec-NSGA_II}, para solucionar o \ref{prob:pim} definido pela formulação apresentada na \cref{sec-definicao_problema}. O \cref{Alg:nsgaii} ilustra como o algoritmo \cref{alg:nsga2_padrao} foi adaptado para os domínios matemáticos específicos exigidos pelos limites de operação e restrições do \ref{prob:pim}.
+
+Para alinhar a formulação matemática do \ref{prob:pim} à heurística adotada para sua solução, estabelece-se a seguinte representação: cada gene de um cromossomo (ou indivíduo) corresponde a uma variável de decisão, enquanto o cromossomo como um todo codifica uma solução candidata completa para a rodada $t$, representada pelo vetor 
+$v^t = [\beta^t, \psi^t, f^t, \theta^t, T^t]$, conforme a tipagem heterogênea ilustrada na \cref{fig:cromossomo}. O processo evolutivo manipula uma população de indivíduos válidos, cujos genes satisfazem as restrições do \ref{prob:pim}, e gera iterativamente uma prole de novas soluções através de operadores genéticos. O objetivo final do algoritmo é convergir para uma Fronteira de Pareto composta por soluções não-dominadas, ou seja, configurações de rede cujos trade-offs entre energia, tempo e participação não podem ser simultaneamente melhorados.
+
+\begin{figure}
+    \centering
+    % Resizebox ajusta o diagrama à largura da página
+    \resizebox{\textwidth}{!}{%
+    \input{Codigos/fig_cromossomo}
+    }
+    \caption{Representação estrutural do cromossomo.}
+    \label{fig:cromossomo}
+    \vspace{-0.3cm}
+\end{figure}
+
+
+O processo evolutivo AFEA fundamentado no NSGA-II é apresentado no \cref{Alg:nsgaii}. O processo inicia-se com a geração de uma população inicial $P_0$ utilizando o operador customizado \textit{CustomFLSampling} (linha \ref{linha:alg2_init}, será explicado na \cref{subsec:aplicacao_AFEA}), responsável por amarrar estocasticamente a geração dos indivíduos à viabilidade estrutural do \ref{prob:pim}. Após avaliar o desempenho e a viabilidade de cada indivíduo frente às restrições do modelo (linha \ref{linha:alg2_eval_p0}), a população é categorizada sob dois critérios essenciais do algoritmo (linha \ref{linha:alg2_rank}): \textit{i)} \textit{Rank} de não-dominância e \textit{ii)} \textit{Crowding distance}.
+
+\begin{algorithm}[htb]
+\caption{Processo Evolutivo AFEA para a Rodada $t$ do \cref{Alg:esquemaFL}}
+\label{Alg:nsgaii}
+\SetKwInput{Input}{Entrada}
+\SetKwInput{Output}{Saída}
+\Input{gerações $G_{max}$, acurácia da rodada anterior $\theta^{t-1}_ i$, vetor de pesos $W = [w_1, w_2, w_3]$}
+\Output{Solução selecionada $v_{best}^t$}
+
+Inicializar população $P_0$ acionando a amostragem heurística ancorada (\textit{CustomFLSampling})\; \label{linha:alg2_init}
+Avaliar objetivos e restrições para $P_0$ conforme formulação do \ref{prob:pim}\; \label{linha:alg2_eval_p0}
+Atribuir rank de não-dominância e \textit{crowding distance} para $P_0$\; \label{linha:alg2_rank}
+
+\For{geração $g = 1$ \KwTo $G_{max}$}{\label{linha:alg2_loop}
+    Selecionar indivíduos pais de $P_{g-1}$ via Torneio Binário\; \label{linha:alg2_selecao_pais}
+    Gerar prole $Q_g$ aplicando SBX e Crossover Uniforme nos pais selecionados\; \label{linha:alg2_cruzamento}
+    Aplicar Mutação Polinomial e Bitflip na prole $Q_g$\; \label{linha:alg2_mutacao}
+    Aplicar filtro probabilístico de reparo pós-mutação (\textit{CustomFLMating}) na prole $Q_g$\; \label{linha:alg2_reparo}
+    Avaliar objetivos e restrições para a prole corrigida $Q_g$\; \label{linha:alg2_eval_qg}
+    $R_g \leftarrow P_{g-1} \cup Q_g$\; \label{linha:alg2_uniao}
+    $P_g \leftarrow$ Selecionar os $N_{pop}$ melhores indivíduos de $R_g$ via rank e \textit{crowding distance}\; \label{linha:alg2_elitismo}
+}
+$F_{pareto} \leftarrow$ Identificar a Fronteira de Pareto da população final $P_{G_{max}}$\; \label{linha:alg2_fronteira}
+$v_{best}^t \leftarrow$ Extrair a solução de $F_{pareto}$ pelo método de Pseudo-Pesos utilizando $W$\; \label{linha:alg2_pseudo}
+\Return{$v_{best}^t$}\; \label{linha:alg2_return}
+\end{algorithm}
+
+Os operadores genéticos são aplicados sobre os pais selecionados para gerar a prole $Q_g$ (linhas \ref{linha:alg2_cruzamento} a \ref{linha:alg2_reparo}). Respeitando os domínios matemáticos das variáveis, utilizam-se operadores adequados à tipagem de cada gene: \textit{i)} Para genes contínuos e inteiros ($f^t, \theta^t, T^t, \psi^t$), aplica-se inicialmente o \textit{Simulated Binary Crossover} (SBX) seguido da Mutação Polinomial \cite{deb:SBX}; \textit{ii)} Para genes binários ($\beta^t$), utiliza-se o \textit{Crossover} Uniforme, no qual cada bit tem probabilidade de 50\% de ser herdado, seguido da mutação \textit{Bitflip} \cite{deb:nsga2}. Fundamentalmente, a geração dessa prole encerra-se com o filtro probabilístico \textit{CustomFLMating}, que atua reparando mutações agressivas e restabelecendo os limites mais próximos das restrições do \ref{prob:pim} (explicado em mais detalhes na \cref{subsec:aplicacao_AFEA}).
+
+Após as variações genéticas, a prole gerada $Q_g$ é avaliada (linha \ref{linha:alg2_eval_qg}). Para garantir o elitismo da evolução, a população original e a prole recém-gerada são unidas em uma matriz intermediária $R_g$ (linha \ref{linha:alg2_uniao}). A partir dessa união conjunta, apenas os $N_{pop}$ melhores indivíduos sobrevivem para compor a próxima geração $P_g$ (linha \ref{linha:alg2_elitismo}).
+
+Ao final das $G_{max}$ gerações, o algoritmo consolida uma Fronteira de Pareto composta exclusivamente por soluções não-dominadas (linha \ref{linha:alg2_fronteira}). Tais soluções representam os trade-offs ótimos do sistema: uma melhora em um dos objetivos $F_1, F_2, F_3$ (respectivamente valores da solução para as equações \cref{eq:obj1_energia,eq:obj2_tempo,eq:obj3_selecao}) necessariamente degradaria outro. Para eleger a solução única que definirá os parâmetros da rede, implementou-se o método de Pseudo-Pesos (linha \ref{linha:alg2_pseudo}). Esse método quantifica o mérito de cada solução $j$ na fronteira através da normalização dos seus valores de objetivos. O pseudo-peso $p_{ij}$ atribuído ao objetivo $i$ na solução $j$ é dado por:
+\begin{equation}
+    p_{ij} = \frac{ (f_i^{max} - f_{ij}) / (f_i^{max} - f_i^{min}) }{ \sum_{k=1}^3 (f_k^{max} - f_{kj}) / (f_k^{max} - f_k^{min}) }
+\end{equation}
+onde $f_i^{max}$ e $f_i^{min}$ são os valores máximo (pior) e mínimo (melhor) do objetivo $i$ encontrados em toda a fronteira. O valor de $p_{ij} \in [0, 1]$ indica a proximidade da solução ao melhor cenário possível para aquele objetivo. Assim, a solução $j$ é caracterizada por um vetor normalizado $P_j = [p_{1j}, p_{2j}, p_{3j}]$. 
+
+O decisor estipula sua preferência operacional por meio de um vetor de pesos $W = [w_1, w_2, w_3]$, tal que $\sum w_i = 1$ (por exemplo, $[0.3, 0.4, 0.3]$ para priorizar $F_2$). O algoritmo varre a fronteira e retorna a solução cujo vetor empírico $P_j$ minimiza a distância euclidiana em relação ao vetor de preferência $W$, ou seja, $\min_j \sqrt{\sum_i (p_{ij} - w_i)^2}$. Desse modo, o modelo resgata o cromossomo $v_{best}^t$ mais fiel à estratégia de operação estipulada (linha \ref{linha:alg2_return}).
+
+O repositório ~\href{https://github.com/niloMarchiori/AFEA}{$https://github.com/niloMarchiori/AFEA$} contém o otimizador AFEA implementado, com casos de uso e documentação. Parte da implementação estende as classes vitais da biblioteca \textit{pymoo} \cite{pymoo}, um \textit{framework} estabelecido para algoritmos genéticos e heurísticos de otimização multiobjetivo.
+
+\subsection{Aplicação da AFEA à instância criada}
+\label{subsec:aplicacao_AFEA}
+
+Para avaliar a aplicabilidade do \textit{framework} proposto, instanciou-se o \ref{prob:pim} em um cenário de otimização contendo as configurações de hardware e limites especificados na instância \cref{tab:sta_config}. O algoritmo NSGA-II foi executado utilizando uma população de 150 indivíduos (\textit{pop\_size} $= 150$) distribuídos ao longo de 500 gerações de evolução ($n\_gen = 500$). 
+
+Devido à elevada dimensionalidade contínuo-discreta do espaço de busca e à não-linearidade das restrições (como as divisões por $f_n$ e os logaritmos limitadores de desempenho local), observou-se que algoritmos evolutivos multivariáveis puros tendem a apresentar uma vasta dispersão na geração de soluções factíveis. Para contornar esse gargalo e blindar a evolução de mutações nas bordas dos domínios, foram projetados dois operadores heurísticos analíticos plugados nativamente ao processo do NSGA-II:
+
+\begin{itemize}
+    \item \textbf{Amostragem Heurística Ancorada (\textit{CustomFLSampling}):} Durante a fase de inicialização, as iterações locais ($\psi_n$) não são geradas aleatoriamente em todo o domínio, mas sim estritamente balizadas no limite rigoroso da precisão esperada $\Psi(\theta_n) = -\log_2(1-\theta_n)$. A partir desse balizador, aplicam-se perturbações estocásticas, induzindo variações no entorno desse limite para garantir a diversidade genética da população, dependendo do status de seleção do dispositivo ($\beta_n$). O tempo limitante da rodada ($T$) de todos os indivíduos iniciais é instanciado a partir do seu mínimo matemático viável (dado pelo cliente mais lento selecionado), impedindo que o algoritmo explore tempos excessivos na geração primária.
+    \item \textbf{Filtro de Reparo Pós-Mutação (\textit{CustomFLMating}):} Durante a evolução, os descendentes são gerados via \textit{Simulated Binary Crossover} (SBX) e Mutação Polinomial. Para manter a estabilidade no limite de factibilidade, introduziu-se um filtro probabilístico que, em 30\% dos casos, atua na nova prole: forçando as iterações locais $\psi_n$ de volta para o limite exato de restrição inferior (quando selecionado) ou superior (quando não selecionado), e, subsequentemente, recalculando e ajustando a variável temporal $T$ para casar perfeitamente com os genes de tempo atualizados daquele cromossomo modificado.
+\end{itemize}
+
+A efetividade dessa heurística pôde ser visualizada ao acompanhar a evolução teórica do modelo frente às restrições. A \cref{fig:evolucao_micro} ilustra como as variáveis individuais do otimizador evoluem durante as rodadas de treinamento federado, provando que as restrições são ativamente respeitadas pelo NSGA-II. As rodadas com pontos faltantes significa que o dispositivo não foi selecionado naquela rodada (ex.: $DC_0$ não foi selecionado na rodada 0).
+
+\begin{figure}[htb]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/evolucao_psi.eps}
+        \caption{Evolução das iterações locais $\psi_n$.}
+        \label{fig:evolucao_psi}
+    \end{subfigure}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/evolucao_freq.eps}
+        \caption{Alocação dinâmica da frequência de CPU ($f_n$).}
+        \label{fig:evolucao_freq}
+    \end{subfigure}
+    \caption{Evolução individual das variáveis de otimização garantindo o respeito aos limites de factibilidade ao longo das rodadas.}
+    \label{fig:evolucao_micro}
+\end{figure}
+
+A restrição fundamental sobre as épocas locais postula que, se um dispositivo for selecionado, ele deve treinar épocas suficientes para garantir a precisão matemática exigida; por outro lado, o limiar de precisão não pode degradar drasticamente de uma rodada para a outra. A \cref{fig:theta_teorico} apresenta a evolução da precisão teórica ($\theta_n$) estabelecida pelo otimizador, a qual baliza a restrição sobre as iterações locais ($\psi_n$) exibidas na \cref{fig:evolucao_psi}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\textwidth]{figuras/nsga2/theta_teorico.eps}
+    \caption{Evolução do limite teórico de acurácia $\theta_n$.}
+    \label{fig:theta_teorico}
+\end{figure}
+
+Pode-se constatar pela \cref{fig:tempos_geral_vs_individual} a eficácia dos operadores \textit{CustomFLSampling} e \textit{CustomFLMating} no estreitamento do treinamento: tempo individual de cada dispositivo é ajustado pelos valores de $\psi_i$ e $f_i$ de modo a assegurar que nenhum recurso energético excessivo seja gasto além do puramente necessário para não ferir as restrições teóricas do problema. Concomitantemente, a \cref{fig:evolucao_freq} ilustra a modulação dinâmica da frequência de CPU, que se ajusta em cada rodada buscando o trade-off ótimo entre energia quadrática e atraso temporal.
+
+Ainda no escopo macro da otimização, o objetivo da justiça na seleção ($F_2$) valoriza que nenhum dispositivo seja prolongadamente excluído do treinamento. A \cref{fig:plot_unselected_count} ilustra a frequência com que cada cliente foi isolado. Em rodadas com participação parcial (ex: nem todos os agentes são selecionados por motivos de energia), o otimizador monitora ativamente quem não participou e atribui maiores penalidades para garantir o escalonamento cíclico dos dispositivos.
+
+\begin{figure}[htpb]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/tempos_geral_vs_individual.eps}
+        \caption{O tempo global $T$ servindo como limite estrito para o atraso de cada agente selecionado.}
+        \label{fig:tempos_geral_vs_individual}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/plot_unselected_count.eps}
+        \caption{Contagem e balanceamento das rodadas em que os clientes não foram selecionados.}
+        \label{fig:plot_unselected_count}
+    \end{subfigure}
+    \caption{Restrição temporal do gargalo global e comportamento da métrica de justiça na seleção ao longo das rodadas.}
+    \label{fig:macro_metricas}
+\end{figure}
+
+Por fim, toda a estrutura multivariável e estocástica implementada reverbera na busca iterativa e tridimensional da Fronteira de Pareto. A \cref{fig:fronteiras_evolutivas} elucida a matriz populacional convergindo em direção aos trade-offs ideais nas etapas de processamento evolutivo. Para cada uma das três rodadas selecionadas (rodada inicial 0, rodada intermediária 34, e rodada final 69), observam-se frentes de Pareto consolidadas, de onde são extraídas as soluções por \textit{Pseudo-Pesos}.  
+
+\begin{figure}[htpb]
+    \centering
+    \begin{subfigure}[b]{0.97\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/comparacao_rodada_0.eps}
+        \caption{Fronteira na Rodada 0.}
+        \label{fig:fronteira_r0}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.97\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/comparacao_rodada_34.eps}
+        \caption{Fronteira na Rodada 34.}
+        \label{fig:fronteira_r34}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.97\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figuras/nsga2/comparacao_rodada_69.eps}
+        \caption{Fronteira na Rodada 69.}
+        \label{fig:fronteira_r69}
+    \end{subfigure}
+    \caption{Evolução da Fronteira de Pareto nas dimensões conflitantes do problema: Energia ($F_1$), Justiça ($F_2$) e Tempo ($F_3$).}
+    \label{fig:fronteiras_evolutivas}
+\end{figure}
+
+A materialização dessa seleção orientada por pseudo-pesos pode ser analisada na \cref{tab:solucoes_dc}. A tabela detalha a anatomia individual dos cromossomos escolhidos pelo decisor para guiar a rede federada nas referidas rodadas analisadas (0, 34 e 69). Fica evidente como, nas rodadas mais avançadas (onde a precisão requerida $\theta$ avizinha-se de $1.0$), o otimizador eleva substancialmente as iterações locais $\psi$ e as frequências de processador exclusivamente para os dispositivos selecionados, adaptando-se às severas exigências de aprendizagem sem desrespeitar a restrição temporal global ($T$) imposta sobre cada instante da federação.
+
+\begin{table}[]
+    \centering
+    \input{Codigos/tabelas/tabela_solucoes}
+    \caption{Caption}
+    \label{tab:placeholder}
+\end{table}
+
+

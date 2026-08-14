@@ -6,6 +6,17 @@ from .parse import load_config
 from pymoo.visualization.scatter import Scatter
 from pymoo.mcdm.pseudo_weights import PseudoWeights
 from pymoo.mcdm.high_tradeoff import HighTradeoffPoints
+from pymoo.core.callback import Callback
+
+class SaveInitialPopCallback(Callback):
+    def __init__(self):
+        super().__init__()
+        self.pop_0_F = None
+
+    def notify(self, algorithm):
+        if algorithm.n_gen == 1:
+            self.pop_0_F = algorithm.pop.get("F")
+
 
 class FLPOPT:
     def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min=0.01, T_max=2**16,**kwargs):
@@ -19,7 +30,8 @@ class FLPOPT:
         self.history = {
             "inputs": [],
             "found_solutions": [],
-            "chosen_solutions": []
+            "chosen_solutions": [],
+            "populacao_0": []
         }
         self.current_round = 0
 
@@ -60,11 +72,16 @@ class FLPOPT:
             "epsilon_0": self.problem.epsilon_0,
             "theta_prev": self._theta_prev.tolist() if isinstance(self._theta_prev, np.ndarray) else self._theta_prev,
             "unselected_count": self._unselected_count.tolist() if isinstance(self._unselected_count, np.ndarray) else self._unselected_count,
-            "kwargs": kwargs
+            "kwargs": kwargs.copy()
         }
+
+        callback = SaveInitialPopCallback()
+        kwargs["callback"] = callback
 
         self.solver = FLSolver(self.problem,pop_size=pop_size)
         self.res=self.solver.solve(n_gen=n_gen, **kwargs)
+
+        self.history["populacao_0"].append(callback.pop_0_F.tolist() if callback.pop_0_F is not None else None)
 
         self.history["inputs"].append(run_input)
         self.history["found_solutions"].append({

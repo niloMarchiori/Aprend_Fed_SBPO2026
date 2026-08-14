@@ -14,8 +14,8 @@ from FLPOPT import load_config
 def main():
     p = argparse.ArgumentParser(description='Executa N rodadas de otimização e salva histórico em JSON')
     p.add_argument('--config', '-c', default=str(REPO_ROOT / 'configs' / 'config_afea_n11.json'), help='Caminho para o arquivo de configuração (JSON)')
-    p.add_argument('--rounds', '-r', type=int, default=20, help='Número de rodadas para avançar')
-    p.add_argument('--output', '-o', default=str(REPO_ROOT / 'use_cases' / 'historico_20_rodadas.json'), help='Caminho do arquivo de saída do histórico JSON')
+    p.add_argument('--rounds', '-r', type=int, default=70, help='Número de rodadas para avançar')
+    p.add_argument('--output', '-o', default=str(REPO_ROOT / 'use_cases' / 'historico_70_rodadas.json'), help='Caminho do arquivo de saída do histórico JSON')
     p.add_argument('--ngen', type=int, default=200, help='Número de gerações do NSGA-II por rodada')
     p.add_argument('--pop', type=int, default=120, help='Tamanho da população por rodada')
     args = p.parse_args()
@@ -39,7 +39,7 @@ def main():
     
     # Pesos utilizados na tomada de decisão (MCDM) a cada rodada
     # [Energia (f1), Unselected Count Penalty (f2), Tempo (f3)]
-    pesos = [0.3, 0.4, 0.3] 
+    pesos = [0.4, 0.2, 0.4] 
 
     for r in range(args.rounds):
         print(f"\n[{r+1}/{args.rounds}] --- EXECUTANDO RODADA {r} ---")

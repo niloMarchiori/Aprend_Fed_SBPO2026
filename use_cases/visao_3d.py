@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-with open('/home/nilo/Documents/AFEA/use_cases/historico_20_rodadas.json', 'r') as f:
+with open('/home/nilo/Documents/AFEA/use_cases/historico_70_rodadas.json', 'r') as f:
     history = json.load(f)
 
 print(f"Número de rodadas na simulação: {len(history['chosen_solutions'])}")
